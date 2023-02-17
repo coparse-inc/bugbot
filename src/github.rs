@@ -47,6 +47,17 @@ pub struct Issue {
     pub id: String,
     pub title: String,
     pub url: String,
+    pub assignees: UserConnection
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UserConnection {
+    pub nodes: Vec<User>
+}
+
+#[derive(Deserialize, Debug)]
+pub struct User {
+    pub name: String
 }
 
 pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
@@ -65,6 +76,11 @@ pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
               id
               url
               title
+              assignees(first: 10) {
+                nodes {
+                    name
+                }
+              }
             }
           }
         }
@@ -81,9 +97,7 @@ pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
     println!("{req:#?}");
 
     let res = req.send().await;
-    let text = res?.text().await;
-    println!("{:#?}", &text);
-    let js: GQLRes<CreateIssueMutation> = serde_json::from_str(text?.as_str())?;
+    let js = res?.json::<GQLRes<CreateIssueMutation>>().await;
     println!("output: {js:#?}");
-    Ok(js.data.createIssue.issue)
+    Ok(js?.data.createIssue.issue)
 }

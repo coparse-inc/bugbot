@@ -105,7 +105,16 @@ impl Command {
         .await;
 
         match res {
-            Ok(x) => format!("Created <{}|Github Issue>, {}", x.url, x.title),
+            Ok(x) => {
+                let assignee_names: Vec<String> =
+                    x.assignees.nodes.into_iter().map(|n| n.name).collect();
+                let suffix = assignee_names
+                    .get(0)
+                    .map_or("with no assignee".to_string(), |n| {
+                        format!("and assigned {}", n)
+                    });
+                format!("Created a new <{}|Github Issue> {}", x.url, suffix)
+            }
             Err(e) => format!("An error occurred {}", e),
         }
     }
