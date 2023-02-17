@@ -1,8 +1,15 @@
+mod env;
+mod github;
+mod parse;
+
+use env::config_env_var;
 use slack_morphism::prelude::*;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use tracing::*;
+use anyhow::Result;
+
 
 use std::sync::Arc;
 
@@ -13,6 +20,8 @@ async fn test_oauth_install_function(
 ) {
     println!("{:#?}", resp);
 }
+
+
 
 
 async fn test_command_events_function(
@@ -27,9 +36,16 @@ async fn test_command_events_function(
     // session
     //     .api_test(&SlackApiTestRequest::new().with_foo("Test".into()))
     //     .await?;
+    //
 
     let text = event.text.clone().unwrap_or("".into());
-    let response_text = format!("Working on {}", text);
+
+    let response_text: String = match parse::Command::from_str(text) {
+        Ok(x) => x.into_response_text().await,
+        Err(x) => x.render().to_string()
+    };
+
+    // let response_text = format!("Working on {}", text);
 
     println!("{:#?}", event);
     Ok(
@@ -113,9 +129,6 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     })
 }
 
-pub fn config_env_var(name: &str) -> Result<String, String> {
-    std::env::var(name).map_err(|e| format!("{}: {}", name, e))
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
