@@ -45,9 +45,6 @@ async fn test_command_events_function(
         Err(x) => x.render().to_string()
     };
 
-    // let response_text = format!("Working on {}", text);
-
-    println!("{:#?}", event);
     Ok(
         SlackCommandEventResponse::new(SlackMessageContent::new().with_text(response_text))
             .with_response_type(SlackMessageResponseType::InChannel),

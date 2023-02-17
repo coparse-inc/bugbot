@@ -33,10 +33,10 @@ impl FromStr for Names {
 }
 
 impl Names {
-    fn to_engineer(self) -> Engineer {
+    fn to_engineer(&self) -> Engineer {
         match self {
             Self::Sean => Engineer {
-                github_id: "",
+                github_id: "MDQ6VXNlcjI0NDk2ODIy",
                 notion_id: "",
             },
             Self::Chase => Engineer {
@@ -67,20 +67,23 @@ pub struct Command {
     assignee: Option<String>,
 
     /// Whether the bug is blocking for release
-    #[arg(short, long, default_value_t = true)]
+    #[arg(short, long, default_value_t = false)]
     blocking: bool,
 
-    description: String,
+    /// Description of the bug
+    description: Vec<String>,
 }
 
 impl Command {
     pub fn from_str(s: String) -> Result<Command, clap::Error> {
-        Self::try_parse_from(s.split(' '))
+        Self::try_parse_from(format!("bug {}", s).split(' '))
     }
 
     fn get_assigned_engineer(&self) -> Option<Engineer> {
         let assignee = self.assignee.as_ref()?;
-        Names::from_str(assignee.as_str()).ok().map(|x| x.to_engineer())
+        Names::from_str(assignee.as_str())
+            .ok()
+            .map(|x| x.to_engineer())
     }
 
     pub async fn into_response_text(self) -> String {
@@ -88,23 +91,22 @@ impl Command {
         // let a =Names::from_str(self.assignee);
         let assignees: Vec<String> = match self.get_assigned_engineer() {
             Some(x) => vec![x.github_id.to_owned()],
-            None => vec![]
+            None => vec![],
         };
-        
 
+        let desc_string = self.description.join(" ");
 
         let res = create_gh_issue(IssueArgs::new(
-            format!("[BugBot] {}", self.description),
-            self.description,
+            format!("[BugBot] {}", desc_string),
+            format!("{}\n\nThis issue was created automatically by [BugBot](https://github.com/seanaye/bugbot)\nType `/bug --help` in the bug reports slack channel", desc_string),
             assignees,
-            vec![]
-        )).await;
-
-
+            vec![],
+        ))
+        .await;
 
         match res {
-            Ok(x) => format!("Created <{}|Github Issue>, {}", x.issue.url, x.issue.title),
-            Err(e) => format!("An error occurred {}", e)
+            Ok(x) => format!("Created <{}|Github Issue>, {}", x.url, x.title),
+            Err(e) => format!("An error occurred {}", e),
         }
     }
 }

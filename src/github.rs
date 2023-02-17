@@ -29,8 +29,12 @@ struct GQLReq<T> {
 
 #[derive(Deserialize, Debug)]
 struct GQLRes<T> {
-    #[serde(flatten)]
     data: T,
+}
+
+#[derive(Deserialize, Debug)]
+struct CreateIssueMutation {
+    pub createIssue: CreateIssuePayload
 }
 
 #[derive(Deserialize, Debug)]
@@ -45,13 +49,13 @@ pub struct Issue {
     pub url: String,
 }
 
-pub async fn create_gh_issue(args: IssueArgs) -> Result<CreateIssuePayload> {
+pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
     let gh_token = config_env_var("GITHUB_TOKEN")?;
     let body = GQLReq {
         query: r##"
         mutation issue($title: String! $body: String! $assignees: [ID!] $labels: [ID!]) {
           createIssue(input: {
-            repositoryId: "someID",
+            repositoryId: "R_kgDOI-bUuw",
             title: $title,
             body: $body,
             assigneeIds: $assignees,
@@ -68,12 +72,18 @@ pub async fn create_gh_issue(args: IssueArgs) -> Result<CreateIssuePayload> {
         .into(),
         variables: args,
     };
-    let resp = reqwest::Client::new()
+    let req = reqwest::Client::new()
         .post("https://api.github.com/graphql")
-        .json(&body)
         .bearer_auth(gh_token)
-        .send()
-        .await?;
-    let js = resp.json::<GQLRes<CreateIssuePayload>>().await?;
-    Ok(js.data)
+        .header(reqwest::header::USER_AGENT, "curl")
+        .json(&body);
+
+    println!("{req:#?}");
+
+    let res = req.send().await;
+    let text = res?.text().await;
+    println!("{:#?}", &text);
+    let js: GQLRes<CreateIssueMutation> = serde_json::from_str(text?.as_str())?;
+    println!("output: {js:#?}");
+    Ok(js.data.createIssue.issue)
 }

@@ -82,6 +82,7 @@ dependencies = [
  "hyper",
  "reqwest",
  "serde",
+ "serde_json",
  "slack-morphism",
  "tokio",
  "tracing",
