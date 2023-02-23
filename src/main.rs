@@ -1,16 +1,15 @@
 mod env;
 mod github;
 mod parse;
-
 use env::config_env_var;
 use slack_morphism::prelude::*;
-
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use tracing::*;
 use anyhow::Result;
 
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 async fn test_oauth_install_function(
@@ -29,14 +28,6 @@ async fn test_command_events_function(
     _client: Arc<SlackHyperClient>,
     _states: SlackClientEventsUserState,
 ) -> Result<SlackCommandEventResponse, Box<dyn std::error::Error + Send + Sync>> {
-    // let token_value: SlackApiTokenValue = config_env_var("SLACK_TEST_TOKEN")?.into();
-    // let token: SlackApiToken = SlackApiToken::new(token_value);
-    // let session = _client.open_session(&token);
-
-    // session
-    //     .api_test(&SlackApiTestRequest::new().with_foo("Test".into()))
-    //     .await?;
-    //
 
     let text = event.text.clone().unwrap_or("".into());
 
@@ -65,11 +56,22 @@ fn test_error_handler(
 #[derive(Debug)]
 struct UserStateExample(u64);
 
+fn get_port() -> i16 {
+    config_env_var("PORT").and_then(|s| s.parse::<i16>()).unwrap_or(8080)
+}
+
+fn get_addr() -> SocketAddr {
+    match config_env_var("RAILWAY_ENVIRONMENT") {
+        Some(_) => std::net::SocketAddr::from(([0,0,0,0], get_port())),
+        None => std::net::SocketAddr::from(([127, 0, 0, 1], 8080))
+    }
+}
+
 async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client: Arc<SlackHyperClient> =
         Arc::new(SlackClient::new(SlackClientHyperConnector::new()));
 
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr = get_addr();
     info!("Loading server: {}", addr);
 
     async fn your_others_routes(
