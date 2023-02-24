@@ -1,18 +1,18 @@
 mod env;
 mod github;
 mod parse;
+mod people;
+use anyhow::Result;
 use env::config_env_var;
-use slack_morphism::prelude::*;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
+use slack_morphism::prelude::*;
 use tracing::*;
-use anyhow::Result;
-
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-async fn test_oauth_install_function(
+async fn oauth_install_handler(
     resp: SlackOAuthV2AccessTokenResponse,
     _client: Arc<SlackHyperClient>,
     _states: SlackClientEventsUserState,
@@ -20,20 +20,16 @@ async fn test_oauth_install_function(
     println!("{:#?}", resp);
 }
 
-
-
-
-async fn test_command_events_function(
+async fn command_events_handler(
     event: SlackCommandEvent,
     _client: Arc<SlackHyperClient>,
     _states: SlackClientEventsUserState,
 ) -> Result<SlackCommandEventResponse, Box<dyn std::error::Error + Send + Sync>> {
-
     let text = event.text.clone().unwrap_or("".into());
 
     let response_text: String = match parse::Command::from_str(text) {
         Ok(x) => x.into_response_text().await,
-        Err(x) => x.render().to_string()
+        Err(x) => x.render().to_string(),
     };
 
     Ok(
@@ -42,7 +38,7 @@ async fn test_command_events_function(
     )
 }
 
-fn test_error_handler(
+fn error_handler(
     err: Box<dyn std::error::Error + Send + Sync>,
     _client: Arc<SlackHyperClient>,
     _states: SlackClientEventsUserState,
@@ -56,18 +52,20 @@ fn test_error_handler(
 #[derive(Debug)]
 struct UserStateExample(u64);
 
-fn get_port() -> i16 {
-    config_env_var("PORT").and_then(|s| s.parse::<i16>()).unwrap_or(8080)
+fn get_port() -> u16 {
+    config_env_var("PORT")
+        .and_then(|s| s.parse::<u16>().map_err(anyhow::Error::from))
+        .unwrap_or(8080)
 }
 
 fn get_addr() -> SocketAddr {
     match config_env_var("RAILWAY_ENVIRONMENT") {
-        Some(_) => std::net::SocketAddr::from(([0,0,0,0], get_port())),
-        None => std::net::SocketAddr::from(([127, 0, 0, 1], 8080))
+        Ok(_) => std::net::SocketAddr::from(([0, 0, 0, 0], get_port())),
+        Err(_) => std::net::SocketAddr::from(([127, 0, 0, 1], 8080)),
     }
 }
 
-async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client: Arc<SlackHyperClient> =
         Arc::new(SlackClient::new(SlackClientHyperConnector::new()));
 
@@ -78,7 +76,8 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         _req: Request<Body>,
     ) -> Result<Response<Body>, Box<dyn std::error::Error + Send + Sync>> {
         Response::builder()
-            .body("Hey, this is a default users route handler".into())
+            .status(404)
+            .body("Not Found".into())
             .map_err(|e| e.into())
     }
 
@@ -95,7 +94,7 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let listener_environment = Arc::new(
         SlackClientEventsListenerEnvironment::new(client.clone())
-            .with_error_handler(test_error_handler)
+            .with_error_handler(error_handler)
             .with_user_state(UserStateExample(0)),
     );
 
@@ -105,11 +104,11 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let listener = SlackClientEventsHyperListener::new(listener_environment.clone());
         async move {
             let routes = chain_service_routes_fn(
-                listener.oauth_service_fn(thread_oauth_config, test_oauth_install_function),
+                listener.oauth_service_fn(thread_oauth_config, oauth_install_handler),
                 chain_service_routes_fn(
                     listener.command_events_service_fn(
                         thread_command_events_config,
-                        test_command_events_function,
+                        command_events_handler,
                     ),
                     your_others_routes,
                 ),
@@ -128,7 +127,6 @@ async fn test_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     })
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let subscriber = tracing_subscriber::fmt()
@@ -136,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
-    test_server().await?;
+    server().await?;
 
     Ok(())
 }

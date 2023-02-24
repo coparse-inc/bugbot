@@ -1,18 +1,21 @@
-use super::config_env_var;
+use crate::config_env_var;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Serialize)]
 pub struct IssueArgs {
+    repo: String,
     title: String,
     body: String,
     assignees: Vec<String>,
     labels: Vec<String>,
 }
 
+
 impl IssueArgs {
-    pub fn new(title: String, body: String, assignees: Vec<String>, labels: Vec<String>) -> Self {
+    pub fn new(repo: String, title: String, body: String, assignees: Vec<String>, labels: Vec<String>) -> Self {
         Self {
+            repo,
             title,
             body,
             assignees,
@@ -60,13 +63,28 @@ pub struct User {
     pub name: String
 }
 
-pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
+async fn gql_fetch<T, U>(args: &GQLReq<T>) -> Result<GQLRes<U>>
+    where T: Serialize,
+        U: DeserializeOwned
+{
     let gh_token = config_env_var("GITHUB_TOKEN")?;
+    let req = reqwest::Client::new()
+        .post("https://api.github.com/graphql")
+        .bearer_auth(gh_token)
+        .header(reqwest::header::USER_AGENT, "curl")
+        .json(args);
+
+
+    let res = req.send().await;
+    res?.json::<GQLRes<U>>().await.map_err(anyhow::Error::from)
+}
+
+pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
     let body = GQLReq {
         query: r##"
-        mutation issue($title: String! $body: String! $assignees: [ID!] $labels: [ID!]) {
+        mutation issue($title: String! $body: String! $assignees: [ID!] $labels: [ID!] $repo: String!) {
           createIssue(input: {
-            repositoryId: "R_kgDOI-bUuw",
+            repositoryId: $repo,
             title: $title,
             body: $body,
             assigneeIds: $assignees,
@@ -88,16 +106,8 @@ pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
         .into(),
         variables: args,
     };
-    let req = reqwest::Client::new()
-        .post("https://api.github.com/graphql")
-        .bearer_auth(gh_token)
-        .header(reqwest::header::USER_AGENT, "curl")
-        .json(&body);
 
-    println!("{req:#?}");
+    let js = gql_fetch::<_, CreateIssueMutation>(&body).await;
 
-    let res = req.send().await;
-    let js = res?.json::<GQLRes<CreateIssueMutation>>().await;
-    println!("output: {js:#?}");
     Ok(js?.data.createIssue.issue)
 }
