@@ -15,7 +15,7 @@ pub struct Command {
     blocking: bool,
 
     /// Open the issue against the bugbot repo for debugging
-    #[arg(short, long, default_value_t = Repo::Bugbot)]
+    #[arg(value_enum, short, long, default_value_t = Repo::Bugbot)]
     repo: Repo,
 
     /// Description of the bug

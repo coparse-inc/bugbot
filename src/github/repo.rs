@@ -18,8 +18,3 @@ impl Repo {
     }
 }
 
-impl Display for Repo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Repo Id: {}", self.to_id())
-    }
-}

@@ -2,7 +2,7 @@ use crate::config_env_var;
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct IssueArgs {
     repo: String,
     title: String,
@@ -75,14 +75,14 @@ async fn gql_fetch<T, U>(args: &GQLReq<T>) -> Result<GQLRes<U>>
         .json(args);
 
 
-    let res = req.send().await;
-    res?.json::<GQLRes<U>>().await.map_err(anyhow::Error::from)
+    let res = req.send().await?;
+    res.json::<GQLRes<U>>().await.map_err(anyhow::Error::from)
 }
 
 pub async fn create_gh_issue(args: IssueArgs) -> Result<Issue> {
     let body = GQLReq {
         query: r##"
-        mutation issue($title: String! $body: String! $assignees: [ID!] $labels: [ID!] $repo: String!) {
+        mutation issue($title: String! $body: String! $assignees: [ID!] $labels: [ID!] $repo: ID!) {
           createIssue(input: {
             repositoryId: $repo,
             title: $title,
